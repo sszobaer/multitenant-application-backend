@@ -1,4 +1,3 @@
-
 import { Injectable, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './DTOs/register.dto';
@@ -6,9 +5,9 @@ import { LoginDto } from './DTOs/login.dto';
 import { Tenant } from 'src/tenants/schema/tanent.schema';
 import { AcceptInviteDto } from './DTOs/accept-invite.dto';
 import { Invitation } from 'src/invitations/schema/invitation.schema';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { User } from 'src/users/schema/user.schema';
-import mongoose, { Model } from 'mongoose';
+import { Model, Connection } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -23,12 +22,15 @@ export class AuthService {
     @InjectModel(Invitation.name)
     private invitationModel: Model<Invitation>,
 
+    @InjectConnection()
+    private readonly connection: Connection,
+
     private readonly jwtService: JwtService,
 
   ) { }
 
   async register(data: RegisterDto) {
-    const session = await mongoose.startSession();
+    const session = await this.connection.startSession();
     session.startTransaction();
 
     try {
@@ -104,7 +106,7 @@ export class AuthService {
   async acceptInvite(token: string, dto: AcceptInviteDto) {
     const { name, password } = dto;
 
-    const session = await mongoose.startSession();
+    const session = await this.connection.startSession();
     session.startTransaction();
 
     try {
@@ -116,6 +118,11 @@ export class AuthService {
         throw new BadRequestException('Invalid invitation token');
       }
 
+      if (invitation.email !== dto.email) {
+        throw new BadRequestException(
+          'This invitation does not belong to this email',
+        );
+      }
       if (invitation.status !== 'pending') {
         throw new BadRequestException(
           'Invitation already used or expired',

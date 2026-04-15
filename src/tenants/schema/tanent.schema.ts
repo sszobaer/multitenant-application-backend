@@ -5,7 +5,7 @@ export type TenantDocument = HydratedDocument<Tenant>;
 
 @Schema({ timestamps: true })
 export class Tenant {
-  @Prop({ required: true })
+  @Prop({ unique: true, required: true })
   name!: string;
 
   @Prop({ default: false })
