@@ -1,6 +1,4 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { CreateUserDto } from './DTOs/create-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User } from './schema/user.schema';
@@ -24,6 +22,6 @@ export class UsersService {
   }
 
   findByEmail(email: string) {
-    return this.userModel.findOne({ where: { email } });
+    return this.userModel.findOne( {email});
   }
 }

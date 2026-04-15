@@ -11,7 +11,7 @@ import { MongooseModule } from '@nestjs/mongoose';
       }
     ])
   ],
-  providers: [TenantService],
+  providers: [TenantService, MongooseModule],
   exports: [TenantService],
 })
 export class TenantsModule {}

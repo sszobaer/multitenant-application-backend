@@ -3,33 +3,33 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { Invitation } from './schema/invitation.schema';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Tenant } from 'src/tenants/schema/tanent.schema';
 
 @Injectable()
 export class InvitationsService {
   constructor(
-    @InjectRepository(Invitation)
-    private readonly invitationRepo: Repository<Invitation>,
+    @InjectModel(Invitation.name)
+    private invitationModel: Model<Invitation>,
 
-    @InjectRepository(Tenant)
-    private readonly tenantRepo: Repository<Tenant>,
+    @InjectModel(Tenant.name)
+    private tanentModel: Model<Tenant>
   ) { }
 
   async sendInvite(tenantId: string, email: string): Promise<{ inviteLink: string }> {
-    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    const tenant = await this.tanentModel.findById(tenantId);
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
 
-    const existing = await this.invitationRepo.findOne({
+    const existing = await this.invitationModel.findOne({
       where: {
         email,
         status: 'pending',
-        tenant: { id: tenant.id },
+        tenant: tenant._id,
       },
     });
 
@@ -43,15 +43,13 @@ export class InvitationsService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const invitation = this.invitationRepo.create({
+    const invitation = await this.invitationModel.create({
       email,
       token,
       status: 'pending',
-      tenant,
+      tenant: tenant._id,
       expiresAt,
     });
-
-    await this.invitationRepo.save(invitation);
 
     const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
     const inviteLink = `${baseUrl}/auth/accept-invite?token=${token}`;

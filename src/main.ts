@@ -2,12 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
 
+   app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,            //  remove extra fields
+      forbidNonWhitelisted: true, //  throw error if extra fields sent
+      transform: true,            //  auto transform types (string → number)
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('Multi-Tanent API')

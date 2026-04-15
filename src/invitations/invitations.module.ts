@@ -5,6 +5,7 @@ import { InvitationsController } from './invitations.controller';
 import { InvitationsService } from './invitations.service';
 import { Invitation, InvitationSchema } from './schema/invitation.schema';
 import { MongooseModule } from '@nestjs/mongoose';
+import { Tenant, TenantSchema } from 'src/tenants/schema/tanent.schema';
 
 
 @Module({
@@ -12,6 +13,10 @@ import { MongooseModule } from '@nestjs/mongoose';
     MongooseModule.forFeature([{
             name: Invitation.name, 
             schema: InvitationSchema,
+          }, 
+          {
+            name: Tenant.name,
+            schema: TenantSchema
           }
         ]),
     JwtModule.register({
@@ -21,5 +26,6 @@ import { MongooseModule } from '@nestjs/mongoose';
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService],
+  exports: [MongooseModule],
 })
 export class InvitationsModule {}

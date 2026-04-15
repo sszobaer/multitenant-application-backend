@@ -1,76 +1,98 @@
 
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './DTOs/register.dto';
 import { LoginDto } from './DTOs/login.dto';
-import { DataSource } from 'typeorm';
 import { Tenant } from 'src/tenants/schema/tanent.schema';
-import { User } from 'src/users/schema/user.entity';
 import { AcceptInviteDto } from './DTOs/accept-invite.dto';
 import { Invitation } from 'src/invitations/schema/invitation.schema';
+import { InjectModel } from '@nestjs/mongoose';
+import { User } from 'src/users/schema/user.schema';
+import mongoose, { Model } from 'mongoose';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly dataSource: DataSource,
+    @InjectModel(Tenant.name)
+    private tenantModel: Model<Tenant>,
+
+    @InjectModel(User.name)
+    private userModel: Model<User>,
+
+    @InjectModel(Invitation.name)
+    private invitationModel: Model<Invitation>,
+
     private readonly jwtService: JwtService,
-  ) {}
+
+  ) { }
 
   async register(data: RegisterDto) {
-    const existingTenant = await this.dataSource.manager.findOne(Tenant, {
-      where: { name: data.tenantName },
-    });
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    if (existingTenant) {
-      throw new BadRequestException('Tenant name already taken');
-    }
-
-    const existingUser = await this.dataSource.manager.findOne(User, {
-      where: { email: data.email },
-    });
-
-    if (existingUser) {
-      throw new BadRequestException('Email already exists');
-    }
-
-    return this.dataSource.transaction(async (manager) => {
-      const tenant = manager.create(Tenant, {
-        name: data.tenantName,
-        isActive: true,
+    try {
+      const tenantExists = await this.tenantModel.findOne({ name: data.tenantName });
+      if (tenantExists) {
+        throw new BadRequestException('Tenant name already taken');
+      }
+      const existingUser = await this.userModel.findOne({
+        email: data.email,
       });
 
-      await manager.save(tenant);
+      if (existingUser) {
+        throw new BadRequestException('Email already exists');
+      }
+
+      const tenant = await this.tenantModel.create([{
+        name: data.tenantName,
+        isActive: true,
+      }
+      ], { session });
 
       const hashedPassword = await bcrypt.hash(data.password, 10);
 
-      const user = manager.create(User, {
-        name: data.name,
-        email: data.email,
-        password: hashedPassword,
-        tenant,
-        role: 'admin',
-      });
+      const user = await this.userModel.create(
+        [
+          {
+            name: data.name,
+            email: data.email,
+            password: hashedPassword,
+            tenant: tenant[0]._id,
+            role: 'admin',
+          },
+        ],
+        { session },
+      );
 
-      const savedUser = await manager.save(user);
+      //Like TypeOrm in moongose there we haven't the auto transaction we have to menually commit this
+      await session.commitTransaction();
+      session.endSession();
 
-      return savedUser;
-    });
+      return user[0];
+    }
+    catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
   }
 
   async login(data: LoginDto) {
-    const user = await this.dataSource.manager.findOne(User, {
-      where: { email: data.email },
-      relations: ['tenant'],
-    });
+    const user = await this.userModel.findOne(
+      { email: data.email }).populate('tenant');
 
     if (!user || !(await bcrypt.compare(data.password, user.password))) {
       throw new BadRequestException('Invalid credentials');
     }
 
+    if (!user.tenant || !(user.tenant as any).isActive) {
+      throw new BadRequestException('Tenant is inactive');
+    }
+
     const payload = {
-      userId: user.id,
-      tenantId: user.tenant.id,
+      userId: user._id,
+      tenantId: (user.tenant as any)._id,
       role: user.role,
     };
 
@@ -80,81 +102,88 @@ export class AuthService {
   }
 
   async acceptInvite(token: string, dto: AcceptInviteDto) {
-  const {name, password } = dto;
+    const { name, password } = dto;
 
-  // 1. Find invitation
-  const invitation = await this.dataSource.manager.findOne(Invitation, {
-    where: { token },
-    relations: ['tenant'],
-  });
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-  if (!invitation) {
-    throw new BadRequestException('Invalid invitation token');
+    try {
+      const invitation = await this.invitationModel
+        .findOne({ token })
+        .populate('tenant');
+
+      if (!invitation) {
+        throw new BadRequestException('Invalid invitation token');
+      }
+
+      if (invitation.status !== 'pending') {
+        throw new BadRequestException(
+          'Invitation already used or expired',
+        );
+      }
+
+      if (invitation.expiresAt && new Date() > invitation.expiresAt) {
+        invitation.status = 'expired';
+        await invitation.save({ session });
+
+        throw new BadRequestException('Invitation has expired');
+      }
+
+      const existingUser = await this.userModel.findOne({
+        email: invitation.email,
+      });
+
+      if (existingUser) {
+        throw new BadRequestException(
+          'User already exists with this email',
+        );
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const user = await this.userModel.create(
+        [
+          {
+            name,
+            email: invitation.email,
+            password: hashedPassword,
+            tenant: (invitation.tenant as any)._id,
+            role: 'user',
+          },
+        ],
+        { session },
+      );
+
+      invitation.status = 'accepted';
+      await invitation.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      const payload = {
+        userId: user[0]._id,
+        tenantId: (invitation.tenant as any)._id,
+        role: user[0].role,
+      };
+
+      const access_token = this.jwtService.sign(payload);
+
+      return {
+        message: 'Invitation accepted successfully',
+        access_token,
+        user: {
+          id: user[0]._id,
+          name: user[0].name,
+          email: user[0].email,
+          role: user[0].role,
+          tenantId: (invitation.tenant as any)._id,
+        },
+      };
+
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
-
-  // 2. Check status
-  if (invitation.status !== 'pending') {
-    throw new BadRequestException('Invitation already used or expired');
-  }
-
-  // 3. Check expiry
-  if (invitation.expiresAt && new Date() > invitation.expiresAt) {
-    invitation.status = 'expired';
-    await this.dataSource.manager.save(invitation);
-
-    throw new BadRequestException('Invitation has expired');
-  }
-
-  // 4. Check if user already exists
-  const existingUser = await this.dataSource.manager.findOne(User, {
-    where: { email: invitation.email },
-  });
-
-  if (existingUser) {
-    throw new BadRequestException('User already exists with this email');
-  }
-
-  // 5. Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  // 6. Transaction (create user + update invitation)
-  const user = await this.dataSource.transaction(async (manager) => {
-    const newUser = manager.create(User, {
-      name,
-      email: invitation.email,
-      password: hashedPassword,
-      tenant: invitation.tenant,
-      role: 'user',
-    });
-
-    const savedUser = await manager.save(newUser);
-
-    invitation.status = 'accepted';
-    await manager.save(invitation);
-
-    return savedUser;
-  });
-
-  // 7. Create JWT
-  const payload = {
-    userId: user.id,
-    tenantId: user.tenant.id,
-    role: user.role,
-  };
-
-  const access_token = this.jwtService.sign(payload);
-
-  return {
-    message: 'Invitation accepted successfully',
-    access_token,
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      tenantId: user.tenant.id,
-    },
-  };
 }
-}
-  
