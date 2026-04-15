@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Tenant } from './entities/tanent.entity';
+import { Tenant } from './schema/tanent.schema';
 import { CreateTenantDto } from './DTOs/create-tenant.dto';
 
 @Injectable()

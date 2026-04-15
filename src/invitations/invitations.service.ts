@@ -6,8 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { Invitation } from './entities/invitation.entity';
-import { Tenant } from 'src/tenants/entities/tanent.entity';
+import { Invitation } from './schema/invitation.schema';
+import { Tenant } from 'src/tenants/schema/tanent.schema';
 
 @Injectable()
 export class InvitationsService {

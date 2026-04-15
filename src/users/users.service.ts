@@ -1,15 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entity/user.entity';
 import { CreateUserDto } from './DTOs/create-user.dto';
-import { promises } from 'dns';
+import { InjectModel } from '@nestjs/mongoose';
+import { User } from './schema/user.schema';
+import { Model } from 'mongoose';
+
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User)
-    private userRepo: Repository<User>,
+    @InjectModel(User.name)
+    private userModel: Model<User>,
   ) {}
 
   async createUser(data: CreateUserDto) {
@@ -18,11 +20,10 @@ export class UsersService {
     if (exists) {
     throw new BadRequestException('Email already exists');
   }
-    const user = this.userRepo.create(data);
-    return this.userRepo.save(user);
+    return this.userModel.create(data);
   }
 
   findByEmail(email: string) {
-    return this.userRepo.findOne({ where: { email } });
+    return this.userModel.findOne({ where: { email } });
   }
 }

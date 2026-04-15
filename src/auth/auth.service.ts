@@ -5,10 +5,10 @@ import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './DTOs/register.dto';
 import { LoginDto } from './DTOs/login.dto';
 import { DataSource } from 'typeorm';
-import { Tenant } from 'src/tenants/entities/tanent.entity';
-import { User } from 'src/users/entity/user.entity';
+import { Tenant } from 'src/tenants/schema/tanent.schema';
+import { User } from 'src/users/schema/user.entity';
 import { AcceptInviteDto } from './DTOs/accept-invite.dto';
-import { Invitation } from 'src/invitations/entities/invitation.entity';
+import { Invitation } from 'src/invitations/schema/invitation.schema';
 
 @Injectable()
 export class AuthService {

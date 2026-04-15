@@ -3,12 +3,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { InvitationsController } from './invitations.controller';
 import { InvitationsService } from './invitations.service';
-import { Invitation } from './entities/invitation.entity';
-import { Tenant } from 'src/tenants/entities/tanent.entity';
+import { Invitation, InvitationSchema } from './schema/invitation.schema';
+import { MongooseModule } from '@nestjs/mongoose';
+
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invitation, Tenant]),
+    MongooseModule.forFeature([{
+            name: Invitation.name, 
+            schema: InvitationSchema,
+          }
+        ]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'secretKey',
       signOptions: { expiresIn: '1d' },
